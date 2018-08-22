@@ -1,6 +1,7 @@
 [package]
-name = "Screentool"
+name = "screentool"
 version = "0.1.0"
 authors = ["Vincent Stakenburg <vincentstakenburg@gmail.com>"]
 
 [dependencies]
+clap = "~2.32"
