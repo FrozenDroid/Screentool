@@ -1,0 +1,6 @@
+[package]
+name = "Screentool"
+version = "0.1.0"
+authors = ["Vincent Stakenburg <vincentstakenburg@gmail.com>"]
+
+[dependencies]
