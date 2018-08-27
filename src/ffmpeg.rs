@@ -262,9 +262,13 @@ impl FfmpegBuilder {
             if self.hw_accel.eq(&Some(HwAccelType::VAAPI)) {
                 cmd.args(&[
                     "-vf",
-                    "format=nv12,hwupload",
+                    "hwupload,scale_vaapi=format=nv12",
                     "-c:v",
-                    "hevc_vaapi",
+                    "h264_vaapi",
+                    "-qp",
+                    "0",
+                    "-threads",
+                    "4",
                 ]);
             }
 
