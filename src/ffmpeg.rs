@@ -214,6 +214,15 @@ impl FfmpegBuilder {
 
         let position_str = ":0.0+".to_owned() + ([pos_x, pos_y].iter().join(",").as_ref());
 
+        if self.hw_accel.eq(&Some(HwAccelType::VAAPI)) {
+            cmd.args(&[
+                "-hwaccel",
+                "vaapi",
+                "-vaapi_device",
+                "/dev/dri/renderD128",
+            ]);
+        }
+
         let std_flags = &[
             "-loglevel",
             "error",
@@ -252,28 +261,17 @@ impl FfmpegBuilder {
 
             if self.hw_accel.eq(&Some(HwAccelType::VAAPI)) {
                 cmd.args(&[
-                    "-hwaccel",
-                    "vaapi",
-                    "-vaapi_device",
-                    "/dev/dri/renderD128",
-                ]);
-            }
-
-            if self.hw_accel.eq(&Some(HwAccelType::VAAPI)) {
-                cmd.args(&[
                     "-vf",
                     "format=nv12,hwupload",
-                    "-bit_rate",
-                    "320k",
                     "-c:v",
-                    "h264_vaapi",
+                    "hevc_vaapi",
                 ]);
             }
 
             if self.hw_accel.eq(&Some(HwAccelType::NVENC)) {
                 cmd.args(&[
                     "-vcodec",
-                    "h264_nvenc",
+                    "hevc_nvenc",
                 ]);
             }
 
@@ -285,8 +283,6 @@ impl FfmpegBuilder {
             ]);
         }
 
-//        println!("{:?}", result_type.as_ref().to_string().to_lowercase());
-
         let result_type: String = result_type.into();
         // finally specify output file
         cmd.args(&[
@@ -294,9 +290,7 @@ impl FfmpegBuilder {
             "-bf",
             "0",
             "-f",
-//            "image2pipe"
             result_type.as_ref()
-//            result_type.as_ref().to_lowercase().as_ref()
         ]);
 
         match self.output {

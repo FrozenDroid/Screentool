@@ -57,27 +57,25 @@ fn main() {
         .args(&[
             Arg::with_name("audio_backend")
                 .long("audio-backend")
+                .value_name("BACKEND")
                 .help("Specify audio backend.")
                 .possible_values(&["alsa", "jack", "pulse"])
-                .requires_all(&["audio_device", "audio_channels"])
-                .takes_value(true)
-                .required(false),
+                .requires_all(&["audio_device", "audio_channels"]),
             Arg::with_name("audio_device")
+                .value_name("DEVICE")
                 .long("audio-device")
-                .help("Specify audio device identifer.")
-                .takes_value(true)
-                .required(false),
+                .help("Specify audio device identifer."),
             Arg::with_name("audio_channels")
+                .value_name("CHANNELS")
                 .long("audio-channels")
                 .help("Set amount of channels to record.")
                 .possible_values(&["1", "2", "mono", "stereo"])
                 .hide_default_value(true)
-                .default_value("stereo")
-                .required(false),
+                .default_value("stereo"),
         ])
         .arg(
             Arg::with_name("output")
-                .help("Path of file to output to.")
+                .help("Path of file to output to.\nUse \"-\" to write output to stdout. This does not work with mp4.")
                 .required(true)
                 .takes_value(true)
         )
@@ -121,7 +119,9 @@ fn main() {
         builder = builder.set_hardware_acceleration(accel_arg.unwrap().parse().unwrap());
     }
 
-    let mut command = builder.build().spawn().unwrap();
+    let mut command = builder.build().output();
+    println!("{:?}", command)
+//    let mut command = builder.build().spawn().unwrap();
 
-    std::process::exit(command.wait().unwrap().code().unwrap())
+//    std::process::exit(command.wait().unwrap().code().unwrap());
 }
