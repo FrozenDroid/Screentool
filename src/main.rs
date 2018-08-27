@@ -119,9 +119,7 @@ fn main() {
         builder = builder.set_hardware_acceleration(accel_arg.unwrap().parse().unwrap());
     }
 
-    let mut command = builder.build().output();
-    println!("{:?}", command)
-//    let mut command = builder.build().spawn().unwrap();
+    let mut command = builder.build().spawn().unwrap();
 
-//    std::process::exit(command.wait().unwrap().code().unwrap());
+    std::process::exit(command.wait().unwrap().code().unwrap());
 }
