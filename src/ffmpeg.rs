@@ -1,11 +1,10 @@
 extern crate itertools;
 
 use std::str::FromStr;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use itertools::Itertools;
-use std::ops::DerefMut;
 
-#[derive(Debug, AsRefStr, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ResultType {
     MP4,
     JPG,
@@ -14,9 +13,15 @@ pub enum ResultType {
 
 #[derive(PartialEq)]
 pub enum HwAccelType {
-    INTEL,
-    AMD,
-    NVIDIA,
+    VAAPI,
+    NVENC,
+}
+
+#[derive(Debug, AsRefStr, PartialEq)]
+pub enum AudioBackend {
+    PULSE,
+    ALSA,
+    JACK,
 }
 
 impl FromStr for HwAccelType {
@@ -24,9 +29,8 @@ impl FromStr for HwAccelType {
 
     fn from_str(s: &str) -> Result<HwAccelType, ()> {
         match s.to_lowercase().as_ref() {
-            "nvidia" => Ok(HwAccelType::NVIDIA),
-            "amd" => Ok(HwAccelType::AMD),
-            "intel" => Ok(HwAccelType::INTEL),
+            "nvenc" => Ok(HwAccelType::NVENC),
+            "vaapi" => Ok(HwAccelType::VAAPI),
             _ => Err(()),
         }
     }
@@ -45,6 +49,82 @@ impl FromStr for ResultType {
     }
 }
 
+impl FromStr for AudioBackend {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<AudioBackend, ()> {
+        match s.to_lowercase().as_ref() {
+            "pulse" => Ok(AudioBackend::PULSE),
+            "jack" => Ok(AudioBackend::JACK),
+            "alsa" => Ok(AudioBackend::ALSA),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromStr for AudioChannels {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<AudioChannels, ()> {
+        match s.to_lowercase().as_ref() {
+            "mono" => Ok(AudioChannels::MONO),
+            "1" => Ok(AudioChannels::MONO),
+            "stereo" => Ok(AudioChannels::STEREO),
+            "2" => Ok(AudioChannels::STEREO),
+            _ => Err(()),
+        }
+    }
+}
+
+
+impl FromStr for Output {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Output, ()> {
+        match s.to_lowercase().as_ref() {
+            "-" => Ok(Output::STREAM),
+            _ => Ok(Output::FILE(s.to_string())),
+        }
+    }
+}
+
+
+pub enum AudioChannels {
+    MONO,
+    STEREO
+}
+
+impl Into<String> for AudioChannels {
+    fn into(self) -> String {
+        match self {
+            AudioChannels::MONO => "1".to_string(),
+            AudioChannels::STEREO => "2".to_string(),
+        }
+    }
+}
+
+impl Into<String> for ResultType {
+    fn into(self) -> String {
+        match self {
+            ResultType::JPG => "mjpeg".to_string(),
+            ResultType::PNG => "apng".to_string(),
+            ResultType::MP4 => "mp4".to_string(),
+        }
+    }
+}
+
+pub struct AudioDevice {
+    pub backend: AudioBackend,
+    pub identifier: String,
+    pub channels: AudioChannels,
+}
+
+#[derive(PartialEq)]
+pub enum Output {
+    STREAM,
+    FILE(String),
+}
+
 pub struct FfmpegBuilder {
     result_type: Option<ResultType>,
     size_x: Option<u32>,
@@ -53,11 +133,13 @@ pub struct FfmpegBuilder {
     pos_y: Option<u32>,
     record_audio: bool,
     hw_accel: Option<HwAccelType>,
+    audio_device: Option<AudioDevice>,
+    output: Output,
 }
 
 impl FfmpegBuilder {
 
-    pub fn new() -> Self {
+    pub fn new(output: Output) -> Self {
         FfmpegBuilder {
             result_type: None,
             size_x: None,
@@ -66,6 +148,8 @@ impl FfmpegBuilder {
             pos_y: None,
             record_audio: false,
             hw_accel: None,
+            audio_device: None,
+            output
         }
     }
 
@@ -106,14 +190,19 @@ impl FfmpegBuilder {
         }
     }
 
+    pub fn set_audio_backend(self, audio_device: AudioDevice) -> Self {
+        Self {
+            audio_device: Some(audio_device),
+            ..self
+        }
+    }
+
     pub fn build(self) -> Command {
         if self.result_type.is_none() || self.size_y.is_none() || self.size_x.is_none() || self.pos_x.is_none() || self.pos_y.is_none() {
             panic!("FfmpegBuilder is incomplete")
         }
 
         let mut cmd = Command::new("ffmpeg");
-
-        let use_hw_accel = self.hw_accel.is_some();
 
         let (result_type, size_x, size_y, pos_x, pos_y) = (
             self.result_type.unwrap(),
@@ -134,7 +223,7 @@ impl FfmpegBuilder {
             position_str.as_ref()
         ];
 
-        let mut framerate = if result_type.eq(&ResultType::MP4) { 60 } else { 1 };
+        let framerate = if result_type.eq(&ResultType::MP4) { 60 } else { 1 };
 
         cmd.args(&[
             "-video_size",
@@ -148,18 +237,20 @@ impl FfmpegBuilder {
         if result_type.eq(&ResultType::MP4) {
 
             if self.record_audio {
+                let audio_device = self.audio_device.unwrap();
+                let channels: String = audio_device.channels.into();
                 // TODO: don't hardcode input device and interface nr
                 cmd.args(&[
                     "-f",
-                    "pulse",
+                    audio_device.backend.as_ref().to_string().to_lowercase().as_ref(),
                     "-ac",
-                    "2",
+                    channels.as_ref(),
                     "-i",
-                    "2"
+                    audio_device.identifier.as_ref()
                 ]);
             }
 
-            if self.hw_accel.eq(&Some(HwAccelType::INTEL)) {
+            if self.hw_accel.eq(&Some(HwAccelType::VAAPI)) {
                 cmd.args(&[
                     "-hwaccel",
                     "vaapi",
@@ -168,7 +259,7 @@ impl FfmpegBuilder {
                 ]);
             }
 
-            if self.hw_accel.eq(&Some(HwAccelType::INTEL)) {
+            if self.hw_accel.eq(&Some(HwAccelType::VAAPI)) {
                 cmd.args(&[
                     "-vf",
                     "format=nv12,hwupload",
@@ -179,7 +270,7 @@ impl FfmpegBuilder {
                 ]);
             }
 
-            if self.hw_accel.eq(&Some(HwAccelType::NVIDIA)) {
+            if self.hw_accel.eq(&Some(HwAccelType::NVENC)) {
                 cmd.args(&[
                     "-vcodec",
                     "h264_nvenc",
@@ -194,13 +285,28 @@ impl FfmpegBuilder {
             ]);
         }
 
+//        println!("{:?}", result_type.as_ref().to_string().to_lowercase());
+
+        let result_type: String = result_type.into();
         // finally specify output file
         cmd.args(&[
             "-y",
             "-bf",
             "0",
-            ("temp.".to_owned() + result_type.as_ref()).to_lowercase().as_ref()
+            "-f",
+//            "image2pipe"
+            result_type.as_ref()
+//            result_type.as_ref().to_lowercase().as_ref()
         ]);
+
+        match self.output {
+            Output::FILE(path) => cmd.arg(path),
+            Output::STREAM => cmd.args(&[
+                "-"
+            ]),
+        };
+
+        cmd.stdout(Stdio::inherit());
 
         cmd
     }
