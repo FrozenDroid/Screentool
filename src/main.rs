@@ -11,7 +11,7 @@ use itertools::Itertools;
 use clap::{App, Arg};
 use ffmpeg::{FfmpegBuilder};
 use std::fmt::Debug;
-
+use ffmpeg::HwAccelType;
 
 
 fn main() {
@@ -25,7 +25,7 @@ fn main() {
                 .value_name("TYPE")
                 .help("Type of screengrab.")
                 .takes_value(true)
-                .possible_values(&["mp4", "gif", "jpg"])
+                .possible_values(&["mp4", "jpg", "png"])
                 .case_insensitive(true)
                 .default_value("jpg")
         )
@@ -41,12 +41,27 @@ fn main() {
         )
         .arg(
             Arg::with_name("size")
+                .value_name("SIZE")
                 .short("s")
                 .long("size")
-                .value_name("SIZE")
                 .help("Size of screengrab")
                 .takes_value(true)
                 .required(true)
+        )
+        .arg(
+            Arg::with_name("acceleration")
+                .value_name("ACCELERATION")
+                .short("accel")
+                .long("acceleration")
+                .help("Type of hardware acceleration")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("audio")
+                .long("enable-audio")
+                .help("Record audio")
+                .default_value("true")
+                .takes_value(false)
         )
         .get_matches();
 
@@ -56,15 +71,32 @@ fn main() {
         panic!();
     }
 
-    let (pos_x, pos_y, size_x, size_y) = position_iterator.merge(size_iterator)
-        .map(|n: &str| n.parse::<u32>().unwrap())
+    let (pos_x, pos_y) = position_iterator.map(|n: &str| n.parse::<u32>().unwrap())
+        .collect_tuple()
+        .unwrap();
+
+    let (size_x, size_y) = size_iterator.map(|n: &str| n.parse::<u32>().unwrap())
         .collect_tuple()
         .unwrap();
     let result_type = matches.value_of("type").unwrap().parse().unwrap();
 
-    println!("{:?}", FfmpegBuilder::new()
+
+    let mut builder = FfmpegBuilder::new();
+
+    builder = builder
         .set_result_type(result_type)
         .set_position(pos_x, pos_y)
         .set_size(size_x, size_y)
-        .build().output());
+        .set_record_audio(matches.is_present("audio"));
+
+    let accel_arg = matches.value_of("acceleration");
+
+    if accel_arg.is_some() {
+        builder = builder.set_hardware_acceleration(accel_arg.unwrap().parse().unwrap());
+    }
+
+    let mut command = builder.build();
+
+    println!("{:?}\n", command);
+    println!("{:?}", command.output());
 }
