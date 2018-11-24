@@ -16,3 +16,4 @@ Screenrecording with VA-API hardware acceleration
 ```
 screentool -t mp4 -a vaapi -s 1920,1080 recording.mp4
 ```
+
