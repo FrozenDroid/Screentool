@@ -120,6 +120,6 @@ fn main() {
     }
 
     let mut command = builder.build().spawn().unwrap();
-
+    
     std::process::exit(command.wait().unwrap().code().unwrap());
 }
